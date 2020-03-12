@@ -31,9 +31,11 @@ class WWWNodeBase(NodeBase):
             self._started=time.time()
             say(self.__class__.category())
         
-        import nodeeditor.WWW_dev_all
-        reload(nodeeditor.WWW_dev_all)
-        a="nodeeditor.WWW_dev_all.{}.run_{}(self)".format(self.__class__.category(),self.__class__.__name__)
+        import PyFlow.Packages.PyFlowWWW.Nodes.WWW_dev_all
+        reload(PyFlow.Packages.PyFlowWWW.Nodes.WWW_dev_all)
+        import PyFlow.Packages.PyFlowWWW.Nodes.WWW_dev_all as WWW_dev_all
+       
+        a="WWW_dev_all.{}.run_{}(self)".format(self.__class__.category(),self.__class__.__name__)
         a=eval(a)
 
         if self._debug: 
@@ -242,51 +244,6 @@ class WWWNodeBase(NodeBase):
         wr=self.getWrapper()
         wr.image=image
         wr.svgIcon.setElementId("layer1")
-
-
-'''
-class FreeCadNodeBase2(FreeCadNodeBase):
-    
-    dok = 0
-    
-    def __init__(self, name="FreeCADNode",**kvargs):
-        
-        super(FreeCadNodeBase2, self).__init__(name)
-    
-    @timer
-    def compute(self, *args, **kwargs):
-        if self._debug:
-            say("--- Start",self.name)
-            self._started=time.time()
-            say(self.__class__.category())
-            #eval("import dev_{}".format(self.__class__.category())
-        
-        import nodeeditor.dev_all
-        reload(nodeeditor.dev_all)
-        a="nodeeditor.dev_all.{}.run_{}(self)".format(self.__class__.category(),self.__class__.__name__)
-        try:
-            a=eval(a)
-        except:
-            sayW("tried to run " + a)
-            import nodeeditor.dev
-            reload (nodeeditor.dev)
-            a=eval("nodeeditor.dev.run_{}(self)".format(self.__class__.__name__))
-
-        if self._debug: 
-            say("--- Done",self.name,round(time.time()-self._started,2))
-
-        self._started2=time.time()
-        self.outExec.call()
-        self.setColor()
-        if self._debug: 
-            say("--- Done Post",self.name,round(time.time()-self._started2,2))
-
-
-        if self._preview:
-            say("create preview")
-            self.preview()
-
-'''
 
 
 
