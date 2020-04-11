@@ -9,6 +9,16 @@ import FreeCAD,FreeCADGui
 import ssl
 import urllib.request
 
+import requests
+import sys
+import re
+
+import numpy as np
+
+
+import Part
+    
+
 
 
 # https://neo4j.com/docs/api/python-driver/current/#installation
@@ -175,6 +185,10 @@ class WWW():
         for postid in range(args['startingPost'],args['startingPost']+args['countPosts']):
 
 
+                    if self._stopped:
+                        sayErr("stopped")
+                        return
+
                     posttimea=time.time()
                     say()
                     sayW("START POST ID",postid)
@@ -285,58 +299,187 @@ class WWW():
         
         
         driver=self.getPinObject('driver')
+        
+        
+        cmd="MATCH (u:FoUser) return u.uid as id"
+        with driver.session() as session:
+                    rc = session.run(cmd)
+        users=[d['id']for d in rc.data()]
+        
+        cmd="MATCH (a:FoThread) return a.tid as id"
+        with driver.session() as session:
+                    rc = session.run(cmd)
+        threads=[d['id']for d in rc.data()]
+        
+        cmd="MATCH (a:FoPost) return a.pid as id"
+        with driver.session() as session:
+                    rc = session.run(cmd)
+        posts=[d['id']for d in rc.data()]
+        
+        #--------------------------------------------
+        def chain_threads():
 
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+
+            '''
+            with driver.session() as session:
+                #rc = session.run("match (t:FoThread) return t.tid as id")
+                rc = session.run("match (t:FoThread)--(:FoImport) return t.tid as id")
+
+            threads={d['id']:1 for d in rc.data()}
+            threads=['35521']
+            threads=['43025']
+            '''
+
+
+
+
+            for tid in threads:
+                say(tid)
+                FreeCADGui.updateGui()
+                #continue
+
+
+                cmd="match (a:FoPost)-[r:in]->(t:FoThread{tid:$thread}) return a.pid as pid order by toFloat(a.pid)"
+                with driver.session() as session:
+                    rc = session.run(cmd,thread=tid)
+
+                data=rc.data()
+                #say(data)
+                pids=[d['pid'] for d in data]
+                say(pids)
+                if len(pids)==0:
+                    continue
+                    
+                for i in range(len(pids)-1):
+                    with driver.session() as session:
+                        cmd="Match (pa:FoPost{pid:$a}),(pb:FoPost{pid:$b}) merge (pa)-[:to]->(pb)"
+                        rc=session.run(cmd,a=pids[i],b=pids[i+1])
+
+                with driver.session() as session:
+                        cmd="Match (t:FoThread{tid:$thread}),(pa:FoPost{pid:$a}) merge (t)-[:posts]->(pa) return t,pa"
+                        rc=session.run(cmd,thread=tid,a=pids[0])
+                        #say(rc.data())
+                #return
+
+        # match (p:FoUser{name:'cada'}) return  p
+        mode=self.getData('mode')
+        if mode == "chainthreads":
+            chain_threads()
+
+        
+            sayW("ANNBZRXCZT!")
+            return
+        
+        #-----------------------------------------------------
+        
+        sayl("USERS")
+        say(len(args['users']))
         for r in args['users']:
+            
+            if r[0] in users:
+                #sayErr("User found",r)
+                continue
+                
+            
+            
+            FreeCADGui.updateGui()
+            if self._stopped:
+                sayErr("stopped")
+                return
+                
             #say(r)
             cmd="MERGE (a:FoUser{uid:$data[0]}) SET a.name=$data[1] SET a.test=10 RETURN a"
+            
+            cmd='''
+            merge (imp:TestImport{name:'I_05'})
+            MERGE (a:FoUser{uid:$data[0]}) SET a.name=$data[1] SET a.test=10
+            merge (a)<-[:import]-(imp)
+            return a
+            '''
             
             try:
                 with driver.session() as session:
                     rc = session.run(cmd,data=r)
-                    say(rc.data())
+                    #say(rc.data())
             
             except Exception as e:
                 sayErr(e)
                 sayErr("Record:")
                 sayErr(r)
-                
-                
+
+        sayl("THREADS")
+        say(len(args['threads']))
+        FreeCADGui.updateGui()
         for r in args['threads']:
-            #say(r)
+            
+            if r[0] in threads:
+                continue
+            
+            if self._stopped:
+                sayErr("stopped")
+                return
+
+            say(r)
+            FreeCADGui.updateGui()
+
+
             cmd='''
+            merge (imp:TestImport{name:'I_05'})
             MERGE (a:FoThread{tid:$data[0],forum:$data[1],title:$data[2]}) 
-            SET a.test=9
+            merge (a)<-[:import]-(imp)
             RETURN a
             '''
             
             try:
                 with driver.session() as session:
                     rc = session.run(cmd,data=r)
-                    say(rc.data())
+                    #say(rc.data())
             
             except Exception as e:
                 sayErr(e)
                 sayErr("Record:")
                 sayErr(r)
-
+        #say(threads)
+        
+        sayl("POSTS")
+        say(len(args['posts']))
+        
         for r in args['posts']:
+            
+            
+            if self._stopped:
+                sayErr("stopped")
+                return
+
+            #if r[0] in posts:
+            #    continue
+
+            say(r)
+            FreeCADGui.updateGui()
+
+
             cmd='''
+            
             MATCH (u:FoUser{uid:$data[2]})
             MATCH (t:FoThread{tid:$data[1]})
+            merge (imp:TestImport{name:'I_05'})
             MERGE (a:FoPost{pid:$data[0]}) 
             
             MERGE (a)<-[:by]-(u)
-            MERGE (t)<-[:in]-(u)
+            MERGE (t)<-[:in]-(a)
 
             SET a.user=$data[2]
             SET t.test=9
+            merge (a)<-[:import]-(imp)
             RETURN a,u
             '''
             
             try:
                 with driver.session() as session:
                     rc = session.run(cmd,data=r)
-                    say(rc.data())
+                    #say(rc.data())
             
             except Exception as e:
                 sayErr(e)
@@ -345,7 +488,7 @@ class WWW():
 
 
 
-
+        say("DONE")
         rc={}
         return rc
 
@@ -477,3 +620,295 @@ class WWW():
         #    say(p,rc[p])
         #    self.setData(p,rc[p])
 
+
+
+    def run_WWW_RemoteCSV(self):
+        sayl("HUHU")
+    
+        fn='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv'
+        
+        with requests.Session() as s:
+            download = s.get(fn)
+
+            udat = download.content.decode('utf-8')
+            lines=udat.split('\n')
+
+        ln=0
+        
+        dat=[l.split(',') for l in lines[:-1]]
+        
+        #ll=[len(l) for l in lines]
+        #print(ll)
+        print ("\n"*1)
+        print(np.array(dat).shape) 
+        print(len(lines))
+        tt=[]
+        for l in lines[:-1]:
+            tt+=[l.split(',')[:76]]
+            #print(len(l.split(',')))
+        print ("\n"*1)
+        print(np.array(tt).shape) 
+        #print (tt)
+
+
+    def run_WWW_ArrayRow(self):
+        say("huhu2")
+        arr=self.getData("array")
+        row=self.getData("row")
+        self.setData("results",arr[row])
+        
+
+    def run_WWW_ArrayColumn(self):
+        say("huhu2")
+        arr=self.getData("array")
+        col=self.getData("column")
+        coldat=[r[col] for r in arr]
+        self.setData("results",coldat)
+        
+    def run_WWW_ArrayToFloat(self):
+        say("huhu2")
+        arr=self.getData("array")
+        coldat=[]
+        for r in arr:
+            try:
+                coldat += [float(r)]
+            except:
+                coldat +=[0.]
+        self.setData("results",coldat)
+
+
+    def run_WWW_SubList(self):
+        say("huhu2")
+        arr=self.getData("array")
+        start=self.getData("start")
+        end=self.getData("end")
+        self.setData("results",arr[start:end])
+        
+
+
+# mehr ideen
+# http://hplgit.github.io/prog4comp/doc/pub/p4c-sphinx-Python/._pylight005.html
+
+    def run_WWW_SIR(self):
+
+        def SIR(NO,IO,a,b,days,RO=0,samples=200, steps=10000):
+            L,S,I,R=[],NO-RO-IO,IO,RO
+            L=[(0,NO,IO,RO)]
+            Ls=[]
+            Ss=[]
+            Rs=[]
+            step, sampleStep =days/steps, steps//samples
+            #print ("step",step)
+            for i in range(steps+1):
+                if   i%sampleStep == 0:
+                    d = i*step
+                    L.append((d,S,I,R))
+                S,I = S*(1.-a*I*step), I*(1.+(a*S-b)*step)
+                #print(i,S,I,R)
+                R = NO-S-I
+
+            return L
+
+        def SIR_as(NO,IO,aas,b,days,RO=0,samples=200, steps=10000):
+            print ("ass variante")
+            L,S,I,R=[],NO-RO-IO,IO,RO
+            L=[(0,NO,IO,RO)]
+            Ls=[]
+            Ss=[]
+            Rs=[]
+            print("lne",len(aas),steps)
+            step, sampleStep =days/steps, steps//samples
+            #print ("step",step)
+            steps  -= 1
+            for i in range(steps+1):
+                if   i%sampleStep == 0:
+                    d = i*step
+                    L.append((d,S,I,R))
+                S,I = S*(1.-aas[i]*I*step), I*(1.+(aas[i]*S-b)*step)
+                #print(i,S,I,R)
+                R = NO-S-I
+
+            return L
+
+        NO=self.getData("kiloNO")*100
+        IO=self.getData('IO')
+        RO=self.getData('RO')*0.01*NO
+        a=0.0001
+        
+        fa=0.000001*0.01
+        
+        a=self.getData("milliA")*fa
+        print ("A ---",a)
+
+        b=1.0/14
+        #b=1.0/60
+        b=1.0/(1+self.getData("invB"))
+        days=self.getData('days')
+        
+        #steps=1000
+        steps=self.getData('steps')
+        print ("steps",steps)
+        samples=self.getData('samples')
+        aas=self.getData("milliAs")
+        aas=np.array(aas)
+        #aas += 1
+        
+        print ("millias",aas[0],aas[-1])
+        aasf=np.array(aas)*fa
+    
+        
+        
+        yf=0.0001
+        yf=0.00005
+
+        if 0:
+            rc=SIR(NO,IO,a,b,days,RO,samples=100, steps=steps)
+        else:
+            rc=SIR_as(NO,IO,aasf,b,days,RO,samples=300, steps=steps)
+        
+        [dates,Ss,Is,Rs]= np.array(rc).swapaxes(0,1)
+#       self.setData('dates',list(dates))
+        self.setData('S',list(np.round(Ss)*yf))
+        self.setData('I',list(np.round(Is)*yf))
+        self.setData('R',list(np.round(Rs)*yf))
+
+
+    def run_WWW_wire2coords(self):
+        
+        w=FreeCAD.activeDocument().Sketch.Shape.Wires[0]
+        days=self.getData('days')
+        samples=self.getData('samples')
+        steps=self.getData('steps')
+        pts=w.discretize(days)
+        print(len(pts))
+        
+        fy=0.4
+
+        [xs,ys,zs]=np.array(pts).swapaxes(0,1)
+        from scipy import interpolate
+        f = interpolate.interp1d(xs, ys)
+        xnew = np.linspace(0,days,steps)
+        ynew = f(xnew) *fy
+
+        print ("ergebnsie")
+#        print(xnew)
+        print(len(ynew))
+        
+
+        self.setData('x',list(xnew))
+        self.setData('y',list(ynew))
+        
+        #self.setData('samples_out',samples)
+        self.setData('steps_out',steps)
+        
+        
+    def run_WWW_SearchList(self):
+        
+        mode =self.getData('mode')     
+        dt=self.getData('datatype')
+        
+        xs=self.getData('x')
+        #say(xs)
+        
+        if dt == 'Float':
+            a=self.getData('aFloat')
+            if mode == 'x > a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) > a:
+                        found += [i]
+            elif mode == 'x >= a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) >= a:
+                        found += [i]
+
+            elif mode == 'x <= a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) <= a:
+                        found += [i]
+            elif mode == 'x < a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) < a:
+                        found += [i]
+            elif mode == 'x == a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) == a:
+                        found += [i]
+            elif mode == 'x != a':
+                found=[]
+                for i,x in enumerate(xs):
+                    if float(x) != a:
+                        found += [i]
+            else:
+                raise Exception ("not implemeted mode:"+ mode )
+        if dt == 'String':
+            a=self.getData('aString').lower().strip()
+            found=[]
+            for i,x in enumerate(xs):
+                x=x.lower().strip()
+                if mode == 'x > a':
+                    if x > a:
+                        found += [i]
+                elif mode == 'x >= a':
+                    if x >= a:
+                        found += [i]
+                elif mode == 'x <= a':
+                    if x <= a:
+                        found += [i]
+                elif mode == 'x < a':
+                    if x < a:
+                        found += [i]
+                elif mode == 'x == a':
+                    if x == a:
+                        found += [i]
+                elif mode == 'x != a':
+                    if x != a:
+                        found += [i]
+                elif mode == 'x starts with a':
+                    if x.startswith(a):
+                        found += [i]
+                elif mode == 'x.endswith(a)':
+                    if x.endswith(a):
+                        found += [i]
+                elif mode == 'x contains a':
+                    if a in x:
+                        found += [i]
+
+                else:
+                    raise Exception ("not implemeted mode:"+ mode )
+
+
+        else:
+                raise Exception ("not implemented datatype:"+dt)
+            
+        say(found)
+        self.setData('found',found)
+        try:
+            first=found[0]
+        except:
+            first=-1
+        self.setData('first',first)
+
+
+    def run_WWW_SublistByIndex(self):
+        sayl()
+        l=self.getData('list')
+        ixs=self.getData('index')
+        lout=[l[i] for i in ixs]
+        self.setData('list_out',lout) 
+    
+    def run_WWW_BoolOnList(self):
+        
+        a=self.getData('listA')
+        b=self.getData('listB')
+        
+        self.setData('AfuseB',list(set(a).union(set(b))))
+        self.setData('AcommonB',list(set(a).intersection(set(b))))
+        self.setData('AcutB',list(set(a).difference(set(b))))
+        
+        
+            
