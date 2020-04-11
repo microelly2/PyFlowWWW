@@ -2,7 +2,6 @@
 from nodeeditor.utils import *
 from nodeeditor.say import *
 
-from nodeeditor.say import *
 
 import time,re
 import FreeCAD,FreeCADGui
@@ -11,7 +10,6 @@ import urllib.request
 
 import requests
 import sys
-import re
 
 import numpy as np
 
@@ -623,7 +621,6 @@ class WWW():
 
 
     def run_WWW_RemoteCSV(self):
-        sayl("HUHU")
     
         fn='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv'
         
@@ -652,21 +649,18 @@ class WWW():
 
 
     def run_WWW_ArrayRow(self):
-        say("huhu2")
         arr=self.getData("array")
         row=self.getData("row")
         self.setData("results",arr[row])
         
 
     def run_WWW_ArrayColumn(self):
-        say("huhu2")
         arr=self.getData("array")
         col=self.getData("column")
         coldat=[r[col] for r in arr]
         self.setData("results",coldat)
         
     def run_WWW_ArrayToFloat(self):
-        say("huhu2")
         arr=self.getData("array")
         coldat=[]
         for r in arr:
@@ -678,7 +672,6 @@ class WWW():
 
 
     def run_WWW_SubList(self):
-        say("huhu2")
         arr=self.getData("array")
         start=self.getData("start")
         end=self.getData("end")
@@ -733,29 +726,24 @@ class WWW():
         NO=self.getData("kiloNO")*100
         IO=self.getData('IO')
         RO=self.getData('RO')*0.01*NO
-        a=0.0001
+
+        days=self.getData('days')       
+        steps=self.getData('steps')
+  
         
         fa=0.000001*0.01
         
         a=self.getData("milliA")*fa
-        print ("A ---",a)
 
         b=1.0/14
-        #b=1.0/60
         b=1.0/(1+self.getData("invB"))
-        days=self.getData('days')
-        
-        #steps=1000
-        steps=self.getData('steps')
-        print ("steps",steps)
+
         samples=self.getData('samples')
         aas=self.getData("milliAs")
         aas=np.array(aas)
-        #aas += 1
         
         print ("millias",aas[0],aas[-1])
         aasf=np.array(aas)*fa
-    
         
         
         yf=0.0001
@@ -780,25 +768,23 @@ class WWW():
         samples=self.getData('samples')
         steps=self.getData('steps')
         pts=w.discretize(days)
-        print(len(pts))
         
         fy=0.4
 
         [xs,ys,zs]=np.array(pts).swapaxes(0,1)
+
         from scipy import interpolate
         f = interpolate.interp1d(xs, ys)
         xnew = np.linspace(0,days,steps)
         ynew = f(xnew) *fy
 
-        print ("ergebnsie")
+#        print ("ergebnsie")
 #        print(xnew)
-        print(len(ynew))
-        
+#        print(len(ynew))     
 
         self.setData('x',list(xnew))
         self.setData('y',list(ynew))
         
-        #self.setData('samples_out',samples)
         self.setData('steps_out',steps)
         
         
@@ -895,7 +881,6 @@ class WWW():
 
 
     def run_WWW_SublistByIndex(self):
-        sayl()
         l=self.getData('list')
         ixs=self.getData('index')
         lout=[l[i] for i in ixs]
